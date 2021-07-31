@@ -1,0 +1,25 @@
+主要分为两部分：
+
+1、特征点检测：Frame1，goofFeaturesToTrack()检测MAX_CNT个特征点，添加到forw_pts中
+
+2、特征点跟踪：calOpticalFlowPyrLK跟踪，将跟踪失败的点剔除，跟踪成功的跟踪次数+1，调用goodFeaturesToTracl（）再检测出MAX_CNT-forw_pts.size()个特征点，添加到forw_pts中，调用updateID 更新ids。
+
+undistortedPoints()中cur_un_pts为归一化相机坐标系下坐标，pts_velocity为当前帧相对于前一帧特征点沿着x、y方向的像素移动速度。
+
+对图像使用光流法进行特征点跟踪，具体流程有：
+
+①先调用createCLAHE() 对图像进行自适应直方图均衡化(如果EQUALIZE=1，表示太亮或则太暗)
+
+②调用calcOpticalFlowPyrLK()跟踪cur_pts到forw_pts,根据status,把跟踪失败的点剔除(注意:prev, cur,forw, ids, track_cnt都要剔除),这里还加了个inBorder判断,把跟踪到图像边缘的点也剔除掉.
+
+③如果不需要发布特征点,则到这步就完了,把当前帧forw赋给上一帧cur, 然后退出.如果需要发布特征点(PUB_THIS_FRAME=1), 则执行下面的步骤
+
+④先调用rejectWithF()对prev_pts和forw_pts做ransac剔除outlier.(实际就是调用了findFundamentalMat函数), 在光流追踪成功就记被追踪+1，数值代表被追踪的次数，数值越大，说明被追踪的就越久
+
+⑤调用setMask(), 先对跟踪点forw_pts按跟踪次数降排序, 然后依次选点, 选一个点, 在mask中将该点周围一定半径的区域设为0, 后面不再选取该区域内的点. 有点类似与non-max suppression, 但区别是这里保留track_cnt最高的点.
+
+⑥在mask中不为0的区域,调用goodFeaturesToTrack提取新的特征角点n_pts, 通过addPoints()函数push到forw_pts中, id初始化-1,track_cnt初始化为1.
+
+undistortedPoints() 对角点图像坐标去畸变矫正，并计算每个角点的速度
+
+值得注意的是，当前帧为forw_pts,被追踪到的帧；curr_pts实际上是上一帧；
